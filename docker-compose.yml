@@ -1,0 +1,7 @@
+version: '3.3'
+services:
+  flask:
+    image: gpt-2-flask-api
+    build: .
+    ports:
+    - "5000:8080"
