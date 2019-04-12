@@ -125,6 +125,32 @@ gcloud beta container clusters create "$PROJECT_ID-gpt2-demo" \
     --enable-autorepair
 ```
 
+Get Istio IP
+
+```bash
+kubectl get svc istio-ingressgateway -n istio-system
+
+export GATEWAY_IP=$(kubectl -n istio-system get service \
+   istio-ingressgateway \
+   -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+echo $GATEWAY_IP
+
+curl -v -H "Host: gpt-2-flask-api.default.example.com" http://$GATEWAY_IP
+```
+
+Test the endpoint by using [https://chrome.google.com/webstore/detail/virtual-hosts/aiehidpclglccialeifedhajckcpedom?hl=en](https://chrome.google.com/webstore/detail/virtual-hosts/aiehidpclglccialeifedhajckcpedom?hl=en)
+
+Set the virtual host to `gpt-2-flask-api.default.example.com` and the IP to the one you recieved from the istio gateway.
+
+![Virtual Host](img/virtual-host-01.png)
+
+### Delete Cluster
+
+```bash
+gcloud container clusters delete devopstar-gpt2-demo
+```
+
 ## Deploy to Cloud Run (GKE)
 
 ```bash
@@ -167,34 +193,9 @@ gcloud beta run deploy \
 
 Navigate to URL [https://gpt-2-flask-api-ulobqfivxa-uc.a.run.app/](https://gpt-2-flask-api-ulobqfivxa-uc.a.run.app/)
 
-### Custom Domain
-
-If you have a custom domain verified already you can also attached a subdomain to the endpoint. Check / verify a domain you own to start with
-
-```bash
-gcloud domains verify devopstar.com
-```
-
-Map the service to a subdomain
-
-```bash
-gcloud beta run domain-mappings create --service gpt-2-flask-api --domain gpt2.devopstar.com
-
-# Creating......done.
-# Mapping successfully created. Waiting for certificate provisioning. You must configure your DNS records for certificate issuance to begin.
-# RECORD TYPE  CONTENTS
-# CNAME        ghs.googlehosted.com
-```
-
-In your DNS provider, add a CNAME entry for your service
-
-![DNS](img/dns-01.png)
-
-Access your endpoint on the custom domain [https://gpt2.devopstar.com](https://gpt2.devopstar.com)
-
 ### Issues with Memory
 
-Unfortunately due to [memory limits](https://cloud.google.com/run/docs/configuring/memory-limits) it doesn't look like we can use Cloud Run for this purpose at the moment
+Unfortunately due to [memory limits](https://cloud.google.com/run/docs/configuring/memory-limits) it doesn't look like we can use Cloud Run for this purpose at the moment...
 
 ```bash
 # 2019-04-11T13:08:14.652058Z 16%|█▌ | 80/512 [04:23<29:04, 4.04s/it]
@@ -209,6 +210,60 @@ Unfortunately due to [memory limits](https://cloud.google.com/run/docs/configuri
 
 upstream request timeout
 ```
+
+However... It does appear that a [request timeout](https://cloud.google.com/run/docs/configuring/request-timeout) can be set using the following update command. It allows a maximum of 15 minutes to be set.
+
+```bash
+# On Update
+gcloud beta run services update gpt-2-flask-api \
+    --timeout=15m
+
+# On Creation
+gcloud beta run deploy \
+    --image asia.gcr.io/devopstar/gpt-2-flask-api \
+    --memory 2Gi \
+    --timeout=15m
+```
+
+And... No dice
+
+```bash
+# 15 minute request only gets halfway
+
+# 2019-04-12T12:59:52.451876Z 55%|█████▌ | 283/512 [14:23<06:42, 1.76s/it]
+# 2019-04-12T12:59:57.242055Z 55%|█████▌ | 284/512 [14:26<08:26, 2.22s/it]
+# 2019-04-12T13:00:02.343637Z 56%|█████▌ | 285/512 [14:31<11:19, 2.99s/it]
+# 2019-04-12T13:00:06.045967Z 56%|█████▌ | 286/512 [14:36<13:39, 3.63s/it]
+# 2019-04-12T13:00:09.955038Z 56%|█████▌ | 287/512 [14:40<13:40, 3.65s/it]
+# 2019-04-12T13:00:14.548409Z 56%|█████▋ | 288/512 [14:44<13:54, 3.73s/it]
+```
+
+### Custom Domain
+
+If you have a custom domain verified already you can also attached a subdomain to the endpoint. Check / verify a domain you own to start with
+
+```bash
+gcloud domains verify devopstar.com
+```
+
+Map the service to a subdomain
+
+```bash
+gcloud beta run domain-mappings create \
+    --service gpt-2-flask-api \
+    --domain gpt2.devopstar.com
+
+# Creating......done.
+# Mapping successfully created. Waiting for certificate provisioning. You must configure your DNS records for certificate issuance to begin.
+# RECORD TYPE  CONTENTS
+# CNAME        ghs.googlehosted.com
+```
+
+In your DNS provider, add a CNAME entry for your service
+
+![DNS](img/dns-01.png)
+
+Access your endpoint on the custom domain [https://gpt2.devopstar.com](https://gpt2.devopstar.com)
 
 ---
 
